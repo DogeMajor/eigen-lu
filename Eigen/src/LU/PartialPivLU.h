@@ -664,6 +664,68 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 3, 3>
 //-----template specialization for 3x3-matrix end-----------
 
 
+//-----template specialization for 4x4-matrix start---------
+
+template <typename Scalar, int StorageOrder, typename PivIndex>
+struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 4, 4>
+{
+  typedef Map<Matrix<Scalar, 4, 4, StorageOrder>> MapLU;
+  typedef Block<MapLU, 4, 4> MatrixType;
+
+  EIGEN_DEVICE_FUNC
+  static Index unblocked_lu(MatrixType &lu, PivIndex *row_transpositions, PivIndex &nb_transpositions)
+  {
+    typedef scalar_score_coeff_op<Scalar> Scoring;
+    typedef typename Scoring::result_type Score;
+    nb_transpositions = 0;
+    Index first_zero_pivot = -1;
+    Index row_of_biggest_in_col;
+    Index rcol = 0;
+    Score biggest_in_corner;
+    Score zero_score = Score(0);
+    for (Index col = 0; col < 3; col++)
+    {
+      rcol = 3 - col;
+      biggest_in_corner = lu.col(col).tail(4 - col).unaryExpr(Scoring()).maxCoeff(&row_of_biggest_in_col);
+      row_of_biggest_in_col += col;
+      row_transpositions[col] = PivIndex(row_of_biggest_in_col);
+      if (biggest_in_corner != zero_score)
+      {
+        if (col != row_of_biggest_in_col)
+        {
+          lu.row(col).swap(lu.row(row_of_biggest_in_col));
+          ++nb_transpositions;
+        }
+        lu.col(col).tail(rcol) /= lu.coeff(col, col);
+      }
+
+      else if (first_zero_pivot == -1)
+      {
+        first_zero_pivot = col;
+      }
+      lu.bottomRightCorner(rcol, rcol).noalias() -= lu.col(col).tail(rcol) * lu.row(col).tail(rcol);
+    }
+
+    row_transpositions[3] = PivIndex(3);
+    if (lu(3, 3) == zero_score && first_zero_pivot == -1)
+    {
+      first_zero_pivot = 3;
+    }
+    return first_zero_pivot;
+  }
+
+  EIGEN_DEVICE_FUNC
+  static Index blocked_lu(Index rows, Index cols, Scalar *lu_data, Index luStride, PivIndex *row_transpositions, PivIndex &nb_transpositions, Index maxBlockSize = 256)
+  {
+    MapLU lu1(lu_data, StorageOrder == RowMajor ? rows : luStride, StorageOrder == RowMajor ? luStride : cols);
+    MatrixType lu(lu1, 0, 0, rows, cols);
+    return unblocked_lu(lu, row_transpositions, nb_transpositions);
+  }
+};
+
+//-----template specialization for 4x4-matrix end-----------
+
+
 //internal performs the LU decomposition with partial pivoting in-place.
   
 template<typename MatrixType, typename TranspositionType>

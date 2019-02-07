@@ -217,6 +217,48 @@ template<typename MatrixType> void lu_partial_piv()
   VERIFY_IS_APPROX(m2, m1.adjoint()*m3);
 }
 
+template <typename MatrixType>
+void lu_partial_piv_fixed_size()
+{
+  /* this test covers template speicalizations in the following file:
+     PartialPivLU.h
+  */
+  typedef typename MatrixType::Index Index;
+  typedef typename NumTraits<typename MatrixType::Scalar>::Real RealScalar;
+  Index size = MatrixType::RowsAtCompileTime;
+
+  MatrixType m1(size, size), m2(size, size), m3(size, size);
+  m1.setRandom();
+  PartialPivLU<MatrixType> plu(m1);
+
+  VERIFY_IS_APPROX(m1, plu.reconstructedMatrix());
+
+  m3 = MatrixType::Random(size, size);
+  m2 = plu.solve(m3);
+  VERIFY_IS_APPROX(m3, m1 * m2);
+  MatrixType m1_inverse = plu.inverse();
+  VERIFY_IS_APPROX(m2, m1_inverse * m3);
+
+  RealScalar rcond = (RealScalar(1) / matrix_l1_norm(m1)) / matrix_l1_norm(m1_inverse);
+  const RealScalar rcond_est = plu.rcond();
+  // Verify that the estimate is within a factor of 10 of the truth.
+  VERIFY(rcond_est > rcond / 10 && rcond_est < rcond * 10);
+
+  // test solve with transposed
+  plu.template _solve_impl_transposed<false>(m3, m2);
+  VERIFY_IS_APPROX(m3, m1.transpose() * m2);
+  m3 = MatrixType::Random(size, size);
+  m3 = plu.transpose().solve(m2);
+  VERIFY_IS_APPROX(m2, m1.transpose() * m3);
+
+  // test solve with conjugate transposed
+  plu.template _solve_impl_transposed<true>(m3, m2);
+  VERIFY_IS_APPROX(m3, m1.adjoint() * m2);
+  m3 = MatrixType::Random(size, size);
+  m3 = plu.adjoint().solve(m2);
+  VERIFY_IS_APPROX(m2, m1.adjoint() * m3);
+}
+
 template<typename MatrixType> void lu_verify_assert()
 {
   MatrixType tmp;
@@ -262,6 +304,9 @@ void test_lu()
     CALL_SUBTEST_4( lu_invertible<MatrixXd>() );
     CALL_SUBTEST_4( lu_partial_piv<MatrixXd>() );
     CALL_SUBTEST_4( lu_verify_assert<MatrixXd>() );
+    CALL_SUBTEST_4( lu_partial_piv_fixed_size<Matrix2d>() );
+    CALL_SUBTEST_4( lu_partial_piv_fixed_size<Matrix3d>() );
+    CALL_SUBTEST_4( lu_partial_piv_fixed_size<Matrix4cf>() );
 
     CALL_SUBTEST_5( lu_non_invertible<MatrixXcf>() );
     CALL_SUBTEST_5( lu_invertible<MatrixXcf>() );

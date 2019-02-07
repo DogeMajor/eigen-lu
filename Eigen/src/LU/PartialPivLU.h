@@ -507,54 +507,18 @@ struct partial_lu_impl
   }
 };
 
-//-----template specialization for 1x1-matrix start-----------
-
-template<typename Scalar, int StorageOrder, typename PivIndex>
-struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 1, 1>
-{
-
-	typedef Map<Matrix<Scalar, 1, 1, StorageOrder> > MapLU;
-	typedef Block<MapLU, 1, 1> MatrixType;
-	typedef Block<MatrixType, 1, 1> BlockType;
-	typedef typename MatrixType::RealScalar RealScalar;
-
-
-	inline static Index unblocked_lu(MatrixType& lu, PivIndex* row_transpositions, PivIndex& nb_transpositions)
-	{
-		cout << "Using template specialization for size 1..." << endl;
-		nb_transpositions = 0;
-		Index first_zero_pivot = -1;
-		row_transpositions[0] = PivIndex(0);
-		return first_zero_pivot;
-	}
-
-	static Index blocked_lu(Index rows, Index cols, Scalar* lu_data, Index luStride, PivIndex* row_transpositions, PivIndex& nb_transpositions, Index maxBlockSize = 256)
-	{
-		MapLU lu1(lu_data, StorageOrder == RowMajor ? rows : luStride, StorageOrder == RowMajor ? luStride : cols);
-		MatrixType lu(lu1, 0, 0, rows, cols);
-		return unblocked_lu(lu, row_transpositions, nb_transpositions);
-
-	}
-};
-
-//-----template specialization for 1x1-matrix stop-----------
-
-
 //-----template specialization for 2x2-matrix start-----------
 
 template<typename Scalar, int StorageOrder, typename PivIndex>
 struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 2, 2>
 {
-	
 	typedef Map<Matrix<Scalar, 2, 2, StorageOrder> > MapLU;
 	typedef Block<MapLU, 2, 2> MatrixType;
 	typedef Block<MatrixType, 2, 2> BlockType;
 	typedef typename MatrixType::RealScalar RealScalar;
 
-
 	inline static Index unblocked_lu(MatrixType& lu, PivIndex* row_transpositions, PivIndex& nb_transpositions)
 	{
-		//cout << "Using template specialization for size 2..." << endl;
 		typedef scalar_score_coeff_op<Scalar> Scoring;
 		typedef typename Scoring::result_type Score;
 		nb_transpositions = 0;
@@ -578,15 +542,15 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 2, 2>
 		}
 		lu(1, 1) -= lu(1, 0)*lu(0, 1);
 		row_transpositions[1] = PivIndex(1);
-		return first_zero_pivot;
-	}
+    if(std::abs(lu(1,1)) == 0 && first_zero_pivot == -1) first_zero_pivot = 1;
+    return first_zero_pivot;
+  }
 
-	static Index blocked_lu(Index rows, Index cols, Scalar* lu_data, Index luStride, PivIndex* row_transpositions, PivIndex& nb_transpositions, Index maxBlockSize = 256)
+	static Index blocked_lu(Index rows, Index cols, Scalar* lu_data, Index luStride, PivIndex* row_transpositions, PivIndex& nb_transpositions)
 	{
 		MapLU lu1(lu_data, StorageOrder == RowMajor ? rows : luStride, StorageOrder == RowMajor ? luStride : cols);
 		MatrixType lu(lu1, 0, 0, rows, cols);
 		return unblocked_lu(lu, row_transpositions, nb_transpositions);
-
 	}
 };
 
@@ -605,7 +569,7 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 3, 3>
 
 	static Index unblocked_lu(MatrixType& lu, PivIndex* row_transpositions, PivIndex& nb_transpositions)
 	{
-		typedef scalar_score_coeff_op<Scalar> Scoring;
+    typedef scalar_score_coeff_op<Scalar> Scoring;
 		typedef typename Scoring::result_type Score;
 		nb_transpositions = 0;
 		Index first_zero_pivot = -1;
@@ -650,10 +614,14 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 3, 3>
 		}
 		lu(2, 2) -= lu(2, 1)*lu(1, 2);
 		row_transpositions[2] = PivIndex(2);
-		return first_zero_pivot;
+    if (std::abs(lu(2, 2)) == 0 && first_zero_pivot == -1)
+    {
+      first_zero_pivot = 2;
+    }
+    return first_zero_pivot;
 	}
 
-	static Index blocked_lu(Index rows, Index cols, Scalar* lu_data, Index luStride, PivIndex* row_transpositions, PivIndex& nb_transpositions, Index maxBlockSize = 256)
+	static Index blocked_lu(Index rows, Index cols, Scalar* lu_data, Index luStride, PivIndex* row_transpositions, PivIndex& nb_transpositions)
 	{
 		MapLU lu1(lu_data, StorageOrder == RowMajor ? rows : luStride, StorageOrder == RowMajor ? luStride : cols);
 		MatrixType lu(lu1, 0, 0, rows, cols);
@@ -669,7 +637,7 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 3, 3>
 template <typename Scalar, int StorageOrder, typename PivIndex>
 struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 4, 4>
 {
-  typedef Map<Matrix<Scalar, 4, 4, StorageOrder>> MapLU;
+  typedef Map<Matrix<Scalar, 4, 4, StorageOrder> > MapLU;
   typedef Block<MapLU, 4, 4> MatrixType;
 
   EIGEN_DEVICE_FUNC
@@ -683,31 +651,31 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 4, 4>
     Index rcol = 0;
     Score biggest_in_corner;
     Score zero_score = Score(0);
-    for (Index col = 0; col < 3; col++)
+    for (Index j = 0; j < 3; j++)
     {
-      rcol = 3 - col;
-      biggest_in_corner = lu.col(col).tail(4 - col).unaryExpr(Scoring()).maxCoeff(&row_of_biggest_in_col);
-      row_of_biggest_in_col += col;
-      row_transpositions[col] = PivIndex(row_of_biggest_in_col);
+      rcol = 3 - j;
+      biggest_in_corner = lu.col(j).tail(4 - j).unaryExpr(Scoring()).maxCoeff(&row_of_biggest_in_col);
+      row_of_biggest_in_col += j;
+      row_transpositions[j] = PivIndex(row_of_biggest_in_col);
       if (biggest_in_corner != zero_score)
       {
-        if (col != row_of_biggest_in_col)
+        if (j != row_of_biggest_in_col)
         {
-          lu.row(col).swap(lu.row(row_of_biggest_in_col));
+          lu.row(j).swap(lu.row(row_of_biggest_in_col));
           ++nb_transpositions;
         }
-        lu.col(col).tail(rcol) /= lu.coeff(col, col);
+        lu.col(j).tail(rcol) /= lu.coeff(j, j);
       }
 
       else if (first_zero_pivot == -1)
       {
-        first_zero_pivot = col;
+        first_zero_pivot = j;
       }
-      lu.bottomRightCorner(rcol, rcol).noalias() -= lu.col(col).tail(rcol) * lu.row(col).tail(rcol);
+      lu.bottomRightCorner(rcol, rcol).noalias() -= lu.col(j).tail(rcol) * lu.row(j).tail(rcol);
     }
 
     row_transpositions[3] = PivIndex(3);
-    if (lu(3, 3) == zero_score && first_zero_pivot == -1)
+    if (std::abs(lu(3, 3)) == 0 && first_zero_pivot == -1)
     {
       first_zero_pivot = 3;
     }
@@ -715,7 +683,7 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 4, 4>
   }
 
   EIGEN_DEVICE_FUNC
-  static Index blocked_lu(Index rows, Index cols, Scalar *lu_data, Index luStride, PivIndex *row_transpositions, PivIndex &nb_transpositions, Index maxBlockSize = 256)
+  static Index blocked_lu(Index rows, Index cols, Scalar *lu_data, Index luStride, PivIndex *row_transpositions, PivIndex &nb_transpositions)
   {
     MapLU lu1(lu_data, StorageOrder == RowMajor ? rows : luStride, StorageOrder == RowMajor ? luStride : cols);
     MatrixType lu(lu1, 0, 0, rows, cols);
@@ -733,18 +701,10 @@ void partial_lu_inplace(MatrixType& lu, TranspositionType& row_transpositions, t
 {
   eigen_assert(lu.cols() == row_transpositions.size());
   eigen_assert((&row_transpositions.coeffRef(1)-&row_transpositions.coeffRef(0)) == 1);
-  /*template<typename Scalar, int StorageOrder, typename PivIndex, int ColSize>
-struct partial_lu_impl*/
   partial_lu_impl
     <typename MatrixType::Scalar, MatrixType::Flags&RowMajorBit?RowMajor:ColMajor, typename TranspositionType::StorageIndex, MatrixType::RowsAtCompileTime, MatrixType::ColsAtCompileTime>
     ::blocked_lu(lu.rows(), lu.cols(), &lu.coeffRef(0,0), lu.outerStride(), &row_transpositions.coeffRef(0), nb_transpositions);
 }
-
-
-
-
-
-
 
 
 } // end namespace internal

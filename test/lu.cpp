@@ -220,7 +220,7 @@ template<typename MatrixType> void lu_partial_piv()
 template <typename MatrixType>
 void lu_partial_piv_fixed_size()
 {
-  /* this test covers template speicalizations in the following file:
+  /* this test covers template speicalizations between 2-dim and 4-dim in the following file:
      PartialPivLU.h
   */
   typedef typename MatrixType::Index Index;

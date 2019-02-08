@@ -507,15 +507,13 @@ struct partial_lu_impl
   }
 };
 
-//-----template specialization for 2x2-matrix start-----------
 
+//-----template specialization for 2x2-matrix start-----------
 template<typename Scalar, int StorageOrder, typename PivIndex>
 struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 2, 2>
 {
 	typedef Map<Matrix<Scalar, 2, 2, StorageOrder> > MapLU;
 	typedef Block<MapLU, 2, 2> MatrixType;
-	typedef Block<MatrixType, 2, 2> BlockType;
-	typedef typename MatrixType::RealScalar RealScalar;
 
 	inline static Index unblocked_lu(MatrixType& lu, PivIndex* row_transpositions, PivIndex& nb_transpositions)
 	{
@@ -553,92 +551,98 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 2, 2>
 		return unblocked_lu(lu, row_transpositions, nb_transpositions);
 	}
 };
-
 //-----template specialization for 2x2-matrix end-----------
 
 
 //-----template specialization for 3x3-matrix start---------
-
 template<typename Scalar, int StorageOrder, typename PivIndex>
 struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 3, 3>
 {
 	typedef Map<Matrix<Scalar, 3, 3, StorageOrder> > MapLU;
 	typedef Block<MapLU, 3, 3> MatrixType;
-	typedef Block<MatrixType, 3, 3> BlockType;
-	typedef typename MatrixType::RealScalar RealScalar;
 
-	static Index unblocked_lu(MatrixType& lu, PivIndex* row_transpositions, PivIndex& nb_transpositions)
-	{
-    typedef scalar_score_coeff_op<Scalar> Scoring;
-		typedef typename Scoring::result_type Score;
-		nb_transpositions = 0;
-		Index first_zero_pivot = -1;
-
-		Index row_of_biggest_in_col;
-		Score biggest_in_corner
-			= lu.col(0).unaryExpr(Scoring()).maxCoeff(&row_of_biggest_in_col);
-		row_transpositions[0] = PivIndex(row_of_biggest_in_col);
-		if (biggest_in_corner != Score(0))
-		{
-			if (0 != row_of_biggest_in_col)
-			{
-				lu.row(0).swap(lu.row(row_of_biggest_in_col));
-				++nb_transpositions;
-			}
-			lu.col(0).tail(2) /= lu.coeff(0, 0);
-		}
-		else if (first_zero_pivot == -1)
-		{
-			first_zero_pivot = 0;
-		}
-		lu.bottomRightCorner(2, 2).noalias() -= lu.col(0).tail(2) * lu.row(0).tail(2);
-
-		biggest_in_corner
-			= lu.col(1).tail(2).unaryExpr(Scoring()).maxCoeff(&row_of_biggest_in_col);
-		row_of_biggest_in_col += 1;
-
-		row_transpositions[1] = PivIndex(row_of_biggest_in_col);
-
-		if (biggest_in_corner != Score(0))
-		{
-			if (1 != row_of_biggest_in_col)
-			{
-				lu.row(1).swap(lu.row(row_of_biggest_in_col));
-				++nb_transpositions;
-			}
-			lu(2, 1) /= lu.coeff(1, 1);
-		}
-		else if (first_zero_pivot == -1)
-		{
-			first_zero_pivot = 1;
-		}
-		lu(2, 2) -= lu(2, 1)*lu(1, 2);
-		row_transpositions[2] = PivIndex(2);
-    if (std::abs(lu(2, 2)) == 0 && first_zero_pivot == -1)
+  template <typename Derived>
+  static inline void calculate_lu(MatrixBase<Derived> &lu, Index &rcol)
+  {
+    if (rcol == 2)
     {
-      first_zero_pivot = 2;
+      lu.template bottomRightCorner<2, 2>().noalias() -= lu.col(0).tail(2) * lu.row(0).tail(2);
     }
-    return first_zero_pivot;
-	}
+    else
+    {
+      lu(2, 2) -= lu(2, 1) * lu(1, 2);
+    }
+  }
 
-	static Index blocked_lu(Index rows, Index cols, Scalar* lu_data, Index luStride, PivIndex* row_transpositions, PivIndex& nb_transpositions)
+  static Index unblocked_lu(MatrixType &lu, PivIndex *row_transpositions, PivIndex &nb_transpositions)
+  {
+    typedef scalar_score_coeff_op<Scalar> Scoring;
+    typedef typename Scoring::result_type Score;
+    nb_transpositions = 0;
+    Index first_zero_pivot = -1;
+    Index row_of_biggest_in_col;
+    Index rcol = 0;
+    Score biggest_in_corner;
+    Score zero_score = Score(0);
+    for (Index j = 0; j < 2; j++)
+    {
+      rcol = 2 - j;
+      biggest_in_corner = lu.col(j).tail(3 - j).unaryExpr(Scoring()).maxCoeff(&row_of_biggest_in_col);
+      row_of_biggest_in_col += j;
+      row_transpositions[j] = PivIndex(row_of_biggest_in_col);
+      if (biggest_in_corner != zero_score)
+      {
+        if (j != row_of_biggest_in_col)
+        {
+          lu.row(j).swap(lu.row(row_of_biggest_in_col));
+          ++nb_transpositions;
+        }
+        lu.col(j).tail(rcol) /= lu.coeff(j, j);
+      }
+      else if (first_zero_pivot == -1)
+      {
+        first_zero_pivot = j;
+      }
+      calculate_lu(lu, rcol);
+    }
+    row_transpositions[2] = PivIndex(2);
+    if (std::abs(lu(2, 2)) == 0 && first_zero_pivot == -1) first_zero_pivot = 2;
+    return first_zero_pivot;
+  }
+
+  static Index blocked_lu(Index rows, Index cols, Scalar* lu_data, Index luStride, PivIndex* row_transpositions, PivIndex& nb_transpositions)
 	{
 		MapLU lu1(lu_data, StorageOrder == RowMajor ? rows : luStride, StorageOrder == RowMajor ? luStride : cols);
 		MatrixType lu(lu1, 0, 0, rows, cols);
 		return unblocked_lu(lu, row_transpositions, nb_transpositions);
 	}
 };
-
 //-----template specialization for 3x3-matrix end-----------
 
 
 //-----template specialization for 4x4-matrix start---------
-
 template <typename Scalar, int StorageOrder, typename PivIndex>
 struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 4, 4>
 {
   typedef Map<Matrix<Scalar, 4, 4, StorageOrder> > MapLU;
   typedef Block<MapLU, 4, 4> MatrixType;
+
+  template <typename Derived>
+  static void calculate_lu(MatrixBase<Derived> & lu, Index &rcol)
+  {
+    if (rcol == 3)
+    {
+      lu.template bottomRightCorner<3, 3>().noalias() -= lu.col(0).tail(3) * lu.row(0).tail(3);
+    }
+    else if (rcol == 2)
+    {
+      lu.template bottomRightCorner<2, 2>().noalias() -= lu.col(1).tail(2) * lu.row(1).tail(2);
+    }
+    else
+    {
+      lu(3, 3) -= lu(2, 3) * lu(3, 2);
+    }
+  }
 
   EIGEN_DEVICE_FUNC
   static Index unblocked_lu(MatrixType &lu, PivIndex *row_transpositions, PivIndex &nb_transpositions)
@@ -671,14 +675,11 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 4, 4>
       {
         first_zero_pivot = j;
       }
-      lu.bottomRightCorner(rcol, rcol).noalias() -= lu.col(j).tail(rcol) * lu.row(j).tail(rcol);
+      calculate_lu(lu, rcol);
     }
 
     row_transpositions[3] = PivIndex(3);
-    if (std::abs(lu(3, 3)) == 0 && first_zero_pivot == -1)
-    {
-      first_zero_pivot = 3;
-    }
+    if (std::abs(lu(3, 3)) == 0 && first_zero_pivot == -1) first_zero_pivot = 3;
     return first_zero_pivot;
   }
 
@@ -690,7 +691,6 @@ struct partial_lu_impl<Scalar, StorageOrder, PivIndex, 4, 4>
     return unblocked_lu(lu, row_transpositions, nb_transpositions);
   }
 };
-
 //-----template specialization for 4x4-matrix end-----------
 
 
